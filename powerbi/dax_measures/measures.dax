@@ -1,0 +1,66 @@
+// =====================================================================
+// P2P Lending Risk & Return - DAX measures
+// Fact table: Loans  (from /api/analytics/loans.csv)   Date table: Calendar
+// Relationship: Calendar[Date] 1 -> * Loans[issue_date]  (single direction)
+// Statuses (standardised in Django): fully_paid, current, late, default,
+// charged_off, unknown.  Denominators are stated for every rate.
+// =====================================================================
+
+// ---------- Volume ----------
+Total Loans        = COUNTROWS ( Loans )
+Funded Amount      = SUM ( Loans[funded_amount] )
+Loan Amount        = SUM ( Loans[loan_amount] )
+Avg Interest Rate  = AVERAGE ( Loans[interest_rate] ) / 100
+Wtd Avg Interest Rate = DIVIDE ( SUMX ( Loans, Loans[interest_rate] * Loans[funded_amount] ), [Funded Amount] ) / 100
+
+// ---------- Status counts ----------
+Fully Paid Loans   = CALCULATE ( [Total Loans], Loans[status] = "fully_paid" )
+Current Loans      = CALCULATE ( [Total Loans], Loans[status] = "current" )
+Late Loans         = CALCULATE ( [Total Loans], Loans[status] = "late" )
+Defaulted Loans    = CALCULATE ( [Total Loans], Loans[status] = "default" )
+Charged Off Loans  = CALCULATE ( [Total Loans], Loans[status] = "charged_off" )
+Bad Loans          = [Defaulted Loans] + [Charged Off Loans]
+Resolved Loans     = [Fully Paid Loans] + [Bad Loans]
+Active Loans       = [Current Loans] + [Late Loans]
+
+// ---------- Rates (denominator in the name) ----------
+Default Rate (of resolved)      = DIVIDE ( [Bad Loans], [Resolved Loans] )
+Charge-off Rate (of resolved)   = DIVIDE ( [Charged Off Loans], [Resolved Loans] )
+Delinquency Rate (of active)    = DIVIDE ( [Late Loans], [Active Loans] )
+
+// ---------- Cash / return ----------
+Outstanding Principal = SUM ( Loans[outstanding_principal] )
+Interest Received     = SUM ( Loans[interest_received] )
+Principal Recovered   = SUM ( Loans[principal_received] )
+Recoveries            = SUM ( Loans[recoveries] )
+Recovery Fees         = SUM ( Loans[recovery_fees] )
+
+// Return metrics use RESOLVED loans only (current loans have incomplete cash flows).
+Resolved Funded = CALCULATE ( [Funded Amount], Loans[status] IN { "fully_paid", "default", "charged_off" } )
+Resolved Payments = CALCULATE ( SUM ( Loans[total_payment] ), Loans[status] IN { "fully_paid", "default", "charged_off" } )
+Gross Return (resolved) = DIVIDE ( [Resolved Payments] - [Resolved Funded], [Resolved Funded] )
+Net Return (resolved)   = DIVIDE ( [Resolved Payments] - [Recovery Fees] - [Resolved Funded], [Resolved Funded] )
+
+Loss Exposure (bad loans) =
+    CALCULATE ( [Funded Amount] - [Principal Recovered], Loans[status] IN { "default", "charged_off" } )
+Recovery Rate (of loss exposure) = DIVIDE ( CALCULATE ( [Recoveries], Loans[status] IN { "default", "charged_off" } ), [Loss Exposure (bad loans)] )
+
+// ---------- Concentration ----------
+// HHI across the grade axis currently in filter context (0-10,000).
+Grade Share = DIVIDE ( [Funded Amount], CALCULATE ( [Funded Amount], ALL ( Loans[grade] ) ) )
+HHI (Grade) = SUMX ( VALUES ( Loans[grade] ), POWER ( [Grade Share] * 100, 2 ) )
+Effective Grades = DIVIDE ( 10000, [HHI (Grade)] )
+
+// ---------- Predicted vs observed (Page 6) ----------
+// Predictions come from a separate table 'Predictions'; never mixed with observed status.
+Avg Predicted PD = AVERAGE ( Predictions[predicted_pd] )
+Observed Default Rate (scored loans) = [Default Rate (of resolved)]
+
+// ---------- Calculated columns (Loans) ----------
+// Interest Band = SWITCH ( TRUE (), Loans[interest_rate] < 8, "<8%", Loans[interest_rate] < 12, "8-12%",
+//     Loans[interest_rate] < 16, "12-16%", Loans[interest_rate] < 20, "16-20%", "20%+" )
+// DTI Band = SWITCH ( TRUE (), ISBLANK ( Loans[dti] ), "Unknown", Loans[dti] < 10, "<10", Loans[dti] < 20, "10-20", Loans[dti] < 30, "20-30", "30+" )
+// Income Band = SWITCH ( TRUE (), ISBLANK ( Loans[annual_income] ), "Unknown", Loans[annual_income] < 30000, "<30k",
+//     Loans[annual_income] < 60000, "30-60k", Loans[annual_income] < 90000, "60-90k", "90k+" )
+// Issue Year = YEAR ( Loans[issue_date] )
+// Data Kind Label = IF ( Loans[source_kind] = "synthetic", "SYNTHETIC - demo only", "Observed" )

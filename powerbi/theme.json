@@ -1,0 +1,14 @@
+{
+  "name": "P2P Financial Analyst",
+  "dataColors": ["#14B8A6", "#0F766E", "#5EEAD4", "#94A3B8", "#475569", "#F59E0B", "#EF4444", "#1E3A5F"],
+  "background": "#FFFFFF",
+  "foreground": "#0B1B33",
+  "tableAccent": "#14B8A6",
+  "textClasses": {
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 14, "color": "#0B1B33" },
+    "label": { "fontFace": "Segoe UI", "fontSize": 10, "color": "#475569" }
+  },
+  "visualStyles": {
+    "page": { "*": { "background": [{ "color": { "solid": { "color": "#F1F5F9" } } }] } }
+  }
+}
